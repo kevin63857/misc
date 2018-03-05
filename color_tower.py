@@ -66,41 +66,77 @@ def runOpenCL():
     __global const int *color_permutations,
     __global int *s5s, __global int *s6s)
     {
-        const int y1s[6]={5,2,0,4,1,3};
-        const int y2s[6]={4,0,1,5,3,2};
-        const int y3s[6]={0,4,3,2,5,1};
-        const int y4s[6]={2,1,5,3,0,4};
-        const int y5s[6]={3,5,2,1,4,0};
-        const int y6s[6]={1,3,4,0,2,5};
+        const int board[6][6]={
+        {3,2,1,6,4,5},
+        {6,4,2,5,1,3},
+        {4,1,5,3,6,2},
+        {5,6,3,4,2,1},
+        {2,3,6,1,5,4},
+        {1,5,4,2,3,6}};
         int gid = get_global_id(0);
-        int s1=0;
+        int s[6]={0,0,0,0,0,0};
         int decode=gid;
-        int s2=decode%720;
+        s[1]=decode%720;
         decode/=720;
-        int s3=decode%720;
+        s[2]=decode%720;
         decode/=720;
-        int s4=decode%720;
-        int s5=0;
-        int s6=0;
+        s[3]=decode%720;
+        //first check if there are duplicates in the 4x4 chunk that is constant for this kernel to be checking
+        bool good_set=true;
+        //check the rows...
+        for(int row=0;row<6;row++){
+            int vals[6]={0,0,0,0,0,0};
+            for(int col=0;col<6;col++){
+                if(board[row][col]>3){
+                    continue;
+                }
+                if(++vals[color_permutations[6*s[board[row][col]]+row]]>1){
+                    good_set=false;
+                }
+            }
+        }
+        //check the columns...
+        for(int col=0;col<6;col++){
+            int vals[6]={0,0,0,0,0,0};
+            for(int row=0;row<6;row++){
+                if(board[row][col]>3){
+                    continue;
+                }
+                if(++vals[color_permutations[6*s[board[row][col]]+row]]>1){
+                    good_set=false;
+                }
+            }
+        }
+        if(!good_set){
+            s5s[gid]=-1;
+            s6s[gid]=-1;
+            return;
+        }
         bool found=false;
-        for(s5=0;(s5<720)&&(!found);s5++){
-            for(s6=0;(s6<720)&&(!found);s6++){
+        for(s[4]=0;(s[4]<720)&&(!found);s[4]++){
+            for(s[5]=0;(s[5]<720)&&(!found);s[5]++){
                 //check rows, then columns for i=1...6
                 bool maybe=true;
-                for(int i=0;(i<6)&&(maybe);i++){
-                    if(color_permutations[6*s1+i]+color_permutations[6*s2+i]+color_permutations[6*s3+i]+color_permutations[6*s4+i]+color_permutations[6*s5+i]+color_permutations[6*s6+i]!=63){
-                        maybe=false;
+                int cols[6]={0,0,0,0,0,0};
+                for(int row=0;row<6 && maybe;row++){
+                    int cur_row=0;
+                    for(int col=0;col<6;col++){
+                        int cur_val=color_permutations[6*s[board[row][col]]+row];
+                        cur_row+=cur_val;
+                        cols[col]+=cur_val;
                     }
-                    if(color_permutations[6*s1+y1s[i]]+color_permutations[6*s2+y2s[i]]+color_permutations[6*s3+y3s[i]]+color_permutations[6*s4+y4s[i]]+color_permutations[6*s5+y5s[i]]+color_permutations[6*s6+y6s[i]]!=63){
-                        maybe=false;
-                    }
+                    maybe=maybe && (cur_row==63);
                 }
-                found=maybe;
+                bool col_check=true;
+                for(int i=0;i<6;i++){
+                    col_check=col_check && cols[i]==63;
+                }
+                found=maybe&&col_check;
             }
         }
         if(found){
-            s5s[gid]=s5;
-            s6s[gid]=s6;
+            s5s[gid]=s[4];
+            s6s[gid]=s[5];
         }else{
             s5s[gid]=-1;
             s6s[gid]=-1;
